@@ -17,6 +17,9 @@ FILE_STATUS = "files/status/{id}"
 ANALYSIS_START = "modeloutput/{id}/{expid}/start"
 ANALYSIS_STATUS = "analysis/{id}/status"
 
+# Experiments
+EXPERIMENT_DATASET_MANIFEST = "experiment/{id}/datasets/manifest"
+
 # Model Outputs
 MODEL_OUTPUT_CREATE = "modeloutput"
 MODEL_OUTPUT_QUERY = MODEL_OUTPUT_CREATE

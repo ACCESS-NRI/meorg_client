@@ -196,6 +196,16 @@ Where `$PATH` is the local path to the file.
 
 This command will return a `$FILE_ID` upon success.
 
+### dataset download
+
+To download the dataset files of an experiment, execute the following command:
+
+```shell
+meorg dataset download $EXPERIMENT_ID [-o $OUTPUT_DIR] [-n 4]
+```
+
+Each file is written to its path under `$OUTPUT_DIR` (default: the current directory), and the command prints the path of each file. A file that is already there with the right size is not downloaded again, so if a download fails, run the same command again.
+
 ### initialise
 
 A simple helper command to write the user credentials file for password-less interaction with the client over the command-line. See above.

@@ -11,6 +11,7 @@ import meorg_client.endpoints as endpoints
 import meorg_client.exceptions as mx
 import meorg_client.utilities as mu
 import meorg_client.parallel as meop
+import meorg_client.downloads as med
 import mimetypes as mt
 from pathlib import Path
 from tqdm import tqdm
@@ -228,6 +229,61 @@ class Client:
         if response.status_code == 200:
             self.headers.pop("X-User-Id", None)
             self.headers.pop("X-Auth-Token", None)
+
+    def get_experiment_dataset_manifest(self, experiment_id: str) -> dict:
+        """Get the dataset files of an experiment, with signed download URLs.
+
+        Parameters
+        ----------
+        experiment_id : str
+            Experiment ID.
+
+        Returns
+        -------
+        dict
+            Response from ME.org.
+        """
+        return self._make_request(
+            method=mcc.HTTP_GET,
+            endpoint=endpoints.EXPERIMENT_DATASET_MANIFEST,
+            url_path_fields=dict(id=experiment_id),
+        )
+
+    def download_experiment_datasets(
+        self,
+        experiment_id: str,
+        output_dir: Union[str, Path],
+        n: int = 4,
+        progress: bool = True,
+    ) -> list:
+        """Download the dataset files of an experiment.
+
+        Each file goes to its relativePath under output_dir. A file that is
+        already there with the right size is not downloaded again.
+
+        Parameters
+        ----------
+        experiment_id : str
+            Experiment ID.
+        output_dir : Union[str, Path]
+            Directory for the files.
+        n : int, optional
+            Number of threads, by default 4.
+        progress : bool, optional
+            Show a progress bar, by default True.
+
+        Returns
+        -------
+        list
+            Local paths of the files.
+        """
+        manifest = self.get_experiment_dataset_manifest(experiment_id)
+        jobs = [
+            (f["url"], med.safe_join(output_dir, f["relativePath"]), f["size"])
+            for f in manifest["files"]
+        ]
+        med.download_files(jobs, n=n, progress=progress)
+        return [target for _, target, _ in jobs]
 
     def _upload_files_parallel(
         self,

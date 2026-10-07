@@ -30,3 +30,17 @@ class InvalidHTTPMethodException(Exception):
 
     def __init__(self, method):
         super().__init__(f"Invalid HTTP Method {method}.")
+
+
+class DownloadException(Exception):
+    """Raised when a file cannot be downloaded.
+
+    Parameters
+    ----------
+    msg : str
+        Message. It must never hold a signed URL.
+    """
+
+    def __init__(self, msg):
+        self.msg = msg
+        super().__init__(msg)

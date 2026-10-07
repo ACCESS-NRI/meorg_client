@@ -19,3 +19,6 @@ HTTP_STATUS_SUCCESS_RANGE = range(200, 300)
 
 # Production URL
 MEORG_BASE_URL_PROD = "https://modelevaluation.org/api"
+
+# Connect and read timeouts (seconds) for signed URL downloads
+DOWNLOAD_TIMEOUT = (10, 120)
