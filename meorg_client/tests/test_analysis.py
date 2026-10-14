@@ -254,6 +254,8 @@ def test_submit_posts_multipart(tmp_path):
     assert [part[1][0] for part in kwargs["files"]] == [
         "PALS.log", "r-stderr.log", "run.json", "input.json",
     ]
+    # formidable reads a part without a content type as a field
+    assert all(part[1][2] for part in kwargs["files"])
 
 
 @pytest.mark.parametrize(

@@ -22,6 +22,25 @@ from pathlib import Path
 from tqdm import tqdm
 
 
+def _file_parts(stack: ExitStack, files: list) -> list:
+    """Multipart file parts for (part name, path) pairs.
+
+    ME.org parses the body with formidable, which reads a part without a
+    content type as a form field, so each part has one.
+    """
+    return [
+        (
+            "file",
+            (
+                name,
+                stack.enter_context(open(path, "rb")),
+                mt.guess_type(name)[0] or "application/octet-stream",
+            ),
+        )
+        for name, path in files
+    ]
+
+
 class Client:
     def __init__(self, email: str = None, password: str = None, dev_mode: bool = False):
         """ME.org Client object.
@@ -434,10 +453,7 @@ class Client:
             Response from ME.org.
         """
         with ExitStack() as stack:
-            payload = [
-                ("file", (name, stack.enter_context(open(path, "rb"))))
-                for name, path in files
-            ]
+            payload = _file_parts(stack, files)
             return self._make_request(
                 method=mcc.HTTP_POST,
                 endpoint=endpoints.ANALYSIS_RESULT,
@@ -482,10 +498,7 @@ class Client:
             has a result.
         """
         with ExitStack() as stack:
-            payload = [
-                ("file", (name, stack.enter_context(open(path, "rb"))))
-                for name, path in files
-            ]
+            payload = _file_parts(stack, files)
             return self._make_request(
                 method=mcc.HTTP_POST,
                 endpoint=endpoints.ANALYSIS_RESULT_ARTIFACTS,
