@@ -68,7 +68,7 @@ def _call(func: callable, **kwargs) -> dict:
     try:
         return func(**kwargs)
     except Exception as ex:
-        click.echo(ex.msg, err=True)
+        click.echo(getattr(ex, "msg", str(ex)), err=True)
 
         # Bubble up the exception
         if mcu.is_dev_mode():
@@ -607,6 +607,151 @@ def analysis_status(id: str):
     click.echo(url)
 
 
+@click.command("input")
+@click.argument("model_output_id")
+@click.argument("experiment_id")
+@click.argument("model_output_files", nargs=-1, type=click.Path(dir_okay=False))
+@click.option("--run-id", required=True, help="Run ID, written as _id.")
+@click.option(
+    "--cache",
+    required=True,
+    type=click.Path(file_okay=False),
+    help="Writable cache root.",
+)
+@click.option(
+    "--cache-ro",
+    multiple=True,
+    type=click.Path(file_okay=False),
+    help="Read-only cache root, searched before --cache. Repeatable.",
+)
+@click.option(
+    "-o",
+    "--output",
+    type=click.Path(dir_okay=False, path_type=Path),
+    default=Path("input.json"),
+    show_default=True,
+    help="Path of the input.json to write.",
+)
+@click.option("-n", default=4, show_default=True, help="Number of threads.")
+def analysis_input(
+    model_output_id: str,
+    experiment_id: str,
+    model_output_files: tuple,
+    run_id: str,
+    cache: str,
+    cache_ro: tuple,
+    output: Path,
+    n: int,
+):
+    """
+    Write the input.json to run an analysis of a model output outside ME.org.
+
+    MODEL_OUTPUT_FILES are local files of the model output. They replace its
+    files on ME.org, so the analysis can run before they are uploaded.
+
+    Prints the path of input.json.
+    """
+    client = _get_client()
+    result = _call(
+        client.prepare_analysis_input,
+        model_output_id=model_output_id,
+        experiment_id=experiment_id,
+        run_id=run_id,
+        cache=cache,
+        cache_ro=cache_ro,
+        model_output_files=model_output_files,
+        n=n,
+        progress=sys.stderr.isatty(),
+    )
+
+    output.write_text(json.dumps(result["input"], indent=2) + "\n")
+    click.echo(
+        f"Downloaded {result['downloaded']} objects, "
+        f"found {result['cached']} in the cache.",
+        err=True,
+    )
+    click.echo(output.absolute())
+
+
+@click.command("submit-result")
+@click.argument("model_output_id")
+@click.argument("experiment_id")
+@click.argument("run_dir", type=click.Path(file_okay=False, exists=True))
+@click.option(
+    "--input",
+    "input_path",
+    type=click.Path(dir_okay=False, exists=True),
+    help="The input.json of the run. Default: RUN_DIR/input.json.",
+)
+@click.option("--runner", default="gadi", show_default=True, help="Runner name.")
+@click.option("--orchestrator", help="Orchestrator name, such as benchcab.")
+@click.option(
+    "--batch-size",
+    type=click.IntRange(min=1),
+    default=mcc.ANALYSIS_RESULT_BATCH_BYTES // 2**20,
+    show_default=True,
+    help="Largest request in MiB. A larger result is sent in batches.",
+)
+def analysis_submit_result(
+    model_output_id: str,
+    experiment_id: str,
+    run_dir: str,
+    input_path: str,
+    runner: str,
+    orchestrator: str,
+    batch_size: int,
+):
+    """
+    Submit the result of a meorg-run run directory.
+
+    Prints the analysis ID.
+    """
+    client = _get_client()
+    response = _call(
+        client.submit_analysis_result,
+        model_output_id=model_output_id,
+        experiment_id=experiment_id,
+        run_dir=run_dir,
+        input_path=input_path,
+        runner=runner,
+        orchestrator=orchestrator,
+        batch_size=batch_size * 2**20,
+    )
+
+    if response.get("data").get("created") is False:
+        click.echo("This result was already stored.", err=True)
+    click.echo(response.get("data").get("analysisId"))
+
+
+@click.command("download")
+@click.argument("experiment_id")
+@click.option(
+    "-o",
+    "--output-dir",
+    type=click.Path(file_okay=False, path_type=Path),
+    default=Path("."),
+    show_default=True,
+    help="Directory for the dataset files.",
+)
+@click.option("-n", default=4, show_default=True, help="Number of threads.")
+def dataset_download(experiment_id: str, output_dir: Path, n: int):
+    """
+    Download the dataset files of an experiment.
+
+    Prints the path of each file. Files that are already complete are kept.
+    """
+    client = _get_client()
+    paths = _call(
+        client.download_experiment_datasets,
+        experiment_id=experiment_id,
+        output_dir=output_dir,
+        n=n,
+    )
+
+    for path in paths:
+        click.echo(path)
+
+
 @click.command()
 @click.option(
     "--dev", is_flag=True, default=False, help="Setup for the development server."
@@ -674,6 +819,11 @@ def cli_model_experiments():
     pass
 
 
+@click.group("dataset", help="Experiment dataset commands.")
+def cli_dataset():
+    pass
+
+
 # Add file commands
 cli_file.add_command(file_list)
 cli_file.add_command(file_upload)
@@ -686,6 +836,8 @@ cli_endpoints.add_command(list_endpoints)
 # Add analysis commands
 cli_analysis.add_command(analysis_start)
 cli_analysis.add_command(analysis_status)
+cli_analysis.add_command(analysis_input)
+cli_analysis.add_command(analysis_submit_result)
 
 # Add output command
 cli_model_output.add_command(create_new_model_output)
@@ -701,6 +853,9 @@ cli_model_benchmark.add_command(model_output_benchmarks_replace)
 cli_model_experiments.add_command(model_output_experiments_extend)
 cli_model_experiments.add_command(model_output_experiment_delete)
 
+# Dataset commands
+cli_dataset.add_command(dataset_download)
+
 # Add subparsers to the master
 cli.add_command(cli_endpoints)
 cli.add_command(cli_file)
@@ -709,6 +864,7 @@ cli.add_command(initialise)
 cli.add_command(cli_model_output)
 cli.add_command(cli_model_benchmark)
 cli.add_command(cli_model_experiments)
+cli.add_command(cli_dataset)
 
 
 if __name__ == "__main__":

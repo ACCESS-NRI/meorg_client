@@ -93,6 +93,34 @@ modelevaluation.org/modelOutput/display/**kafS53HgWu2CDXxgC**
 
 This command will return an `$ANALYSIS_ID` upon success which is used in `analysis status`.
 
+### analysis input
+
+To run an analysis yourself, for example with `meorg-run` on Gadi, first write its `input.json`:
+
+```shell
+meorg analysis input $MODEL_OUTPUT_ID $EXPERIMENT_ID [$FILES...] --run-id $RUN_ID --cache $CACHE_DIR [--cache-ro $SHARED_CACHE_DIR] [-o input.json] [-n 4]
+```
+
+ME.org chooses the input files, as it does for an analysis that it runs. Each file is kept at `$CACHE_DIR/<object key>` and is downloaded only when it is not already there (or in a `--cache-ro` directory) with the right size.
+
+`$FILES` are local files of the model output, for example `outputs/*.nc`. They replace its files on ME.org, so you can run the analysis before you upload them.
+
+The command prints the path of `input.json`. It does not contain the download URLs.
+
+### analysis submit-result
+
+To send the result of a run to ME.org, execute the following command:
+
+```shell
+meorg analysis submit-result $MODEL_OUTPUT_ID $EXPERIMENT_ID $RUN_DIR [--input $RUN_DIR/input.json] [--orchestrator NAME]
+```
+
+Where `$RUN_DIR` is the directory that `meorg-run` wrote. The run ID is the `externalRunId` in `run.json`: give `meorg-run` the same ID as `meorg analysis input` (`MEORG_RUN_ID=$RUN_ID meorg-run ...`).
+
+This command will return an `$ANALYSIS_ID` upon success, also for a failed run. Sending the same run again returns the stored analysis.
+
+Then upload the model output files with `meorg file upload`, with the same file names. Until they are uploaded, ME.org does not run its own analysis of the model output.
+
 ### model output create
 
 To create a model output, execute the following command:
@@ -195,6 +223,16 @@ meorg file upload $PATH
 Where `$PATH` is the local path to the file.
 
 This command will return a `$FILE_ID` upon success.
+
+### dataset download
+
+To download the dataset files of an experiment, execute the following command:
+
+```shell
+meorg dataset download $EXPERIMENT_ID [-o $OUTPUT_DIR] [-n 4]
+```
+
+Each file is written to its path under `$OUTPUT_DIR` (default: the current directory), and the command prints the path of each file. A file that is already there with the right size is not downloaded again, so if a download fails, run the same command again.
 
 ### initialise
 

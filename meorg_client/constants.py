@@ -19,3 +19,13 @@ HTTP_STATUS_SUCCESS_RANGE = range(200, 300)
 
 # Production URL
 MEORG_BASE_URL_PROD = "https://modelevaluation.org/api"
+
+# Connect and read timeouts (seconds) for signed URL downloads
+DOWNLOAD_TIMEOUT = (10, 120)
+
+# Connect and read timeouts (seconds) for posting an analysis result
+ANALYSIS_RESULT_TIMEOUT = (10, 600)
+
+# Largest file bytes in one analysis result request. The nginx in front of
+# ME.org accepts 200 MiB of request body; this leaves room for the multipart.
+ANALYSIS_RESULT_BATCH_BYTES = 100 * 1024 * 1024
