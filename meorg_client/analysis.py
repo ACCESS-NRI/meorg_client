@@ -42,6 +42,11 @@ def model_output_entries(model_output: dict, paths: list) -> list:
     ]
 
 
+# Parts that go with the result itself. The others can be sent before it in
+# batches. ME.org reads PALS.log only from the result request.
+RESULT_PARTS = {"output.json", "input.json", "run.json", "PALS.log", "r-stderr.log"}
+
+
 def result_parts(run_dir: Path, input_path: Path, success: bool) -> list:
     """List the files to send for a run directory written by meorg-run.
 
@@ -76,3 +81,32 @@ def result_parts(run_dir: Path, input_path: Path, success: bool) -> list:
     paths += [log for log in logs if log.is_file()] + [run_dir / "run.json"]
     parts = [(path.name, path) for path in dict.fromkeys(paths)]
     return parts + [("input.json", Path(input_path))]
+
+
+def batches(parts: list, limit: int) -> list:
+    """Split parts, in order, into batches of at most limit file bytes.
+
+    Parameters
+    ----------
+    parts : list
+        (part name, path) pairs.
+    limit : int
+        Largest number of file bytes in a batch.
+
+    Returns
+    -------
+    list
+        Lists of parts. A part larger than limit is in a batch alone.
+    """
+    groups, size = [], 0
+
+    for part in parts:
+        part_size = Path(part[1]).stat().st_size
+        if groups and size + part_size <= limit:
+            groups[-1].append(part)
+            size += part_size
+        else:
+            groups.append([part])
+            size = part_size
+
+    return groups

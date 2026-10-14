@@ -18,6 +18,7 @@ ANALYSIS_START = "modeloutput/{id}/{expid}/start"
 ANALYSIS_STATUS = "analysis/{id}/status"
 ANALYSIS_INPUT = "modeloutput/{id}/{expid}/analysis-input"
 ANALYSIS_RESULT = "modeloutput/{id}/{expid}/analysis-result"
+ANALYSIS_RESULT_ARTIFACTS = "modeloutput/{id}/{expid}/analysis-result/artifacts"
 
 # Experiments
 EXPERIMENT_DATASET_MANIFEST = "experiment/{id}/datasets/manifest"

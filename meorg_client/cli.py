@@ -685,6 +685,13 @@ def analysis_input(
 )
 @click.option("--runner", default="gadi", show_default=True, help="Runner name.")
 @click.option("--orchestrator", help="Orchestrator name, such as benchcab.")
+@click.option(
+    "--batch-size",
+    type=click.IntRange(min=1),
+    default=mcc.ANALYSIS_RESULT_BATCH_BYTES // 2**20,
+    show_default=True,
+    help="Largest request in MiB. A larger result is sent in batches.",
+)
 def analysis_submit_result(
     model_output_id: str,
     experiment_id: str,
@@ -692,6 +699,7 @@ def analysis_submit_result(
     input_path: str,
     runner: str,
     orchestrator: str,
+    batch_size: int,
 ):
     """
     Submit the result of a meorg-run run directory.
@@ -707,6 +715,7 @@ def analysis_submit_result(
         input_path=input_path,
         runner=runner,
         orchestrator=orchestrator,
+        batch_size=batch_size * 2**20,
     )
 
     if response.get("data").get("created") is False:

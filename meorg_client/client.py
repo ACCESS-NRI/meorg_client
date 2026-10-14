@@ -452,6 +452,60 @@ class Client:
                 timeout=mcc.ANALYSIS_RESULT_TIMEOUT,
             )
 
+    def post_analysis_artifacts(
+        self,
+        model_output_id: str,
+        experiment_id: str,
+        external_run_id: str,
+        runner: str,
+        files: list,
+    ) -> dict:
+        """Post a batch of the artifacts of a result, before the result.
+
+        Parameters
+        ----------
+        model_output_id : str
+            Model output ID.
+        experiment_id : str
+            Experiment ID.
+        external_run_id : str
+            Run ID.
+        runner : str
+            Runner name, such as gadi.
+        files : list
+            (part name, path) pairs.
+
+        Returns
+        -------
+        dict
+            Response from ME.org. data.complete is true when the run already
+            has a result.
+        """
+        with ExitStack() as stack:
+            payload = [
+                ("file", (name, stack.enter_context(open(path, "rb"))))
+                for name, path in files
+            ]
+            return self._make_request(
+                method=mcc.HTTP_POST,
+                endpoint=endpoints.ANALYSIS_RESULT_ARTIFACTS,
+                url_path_fields=dict(id=model_output_id, expid=experiment_id),
+                data=dict(externalRunId=external_run_id, runner=runner),
+                files=payload,
+                timeout=mcc.ANALYSIS_RESULT_TIMEOUT,
+            )
+
+    @staticmethod
+    def _retry(func, retries: int, backoff: float, **kwargs) -> dict:
+        """Call func, retrying a network error or a 5xx response."""
+        for attempt in range(retries + 1):
+            try:
+                return func(**kwargs)
+            except (RequestException, requests.exceptions.RequestException) as ex:
+                if attempt == retries or getattr(ex, "status_code", 500) < 500:
+                    raise
+                time.sleep(backoff * 2**attempt)
+
     def submit_analysis_result(
         self,
         model_output_id: str,
@@ -462,12 +516,17 @@ class Client:
         orchestrator: str = None,
         retries: int = 3,
         backoff: float = 5,
+        batch_size: int = mcc.ANALYSIS_RESULT_BATCH_BYTES,
     ) -> dict:
         """Submit the run directory that meorg-run wrote.
 
-        A network error or a 5xx response is retried, waiting backoff
-        seconds and then twice as long each time. ME.org stores one result
-        per run ID, so a retry is safe.
+        When the files are larger than batch_size together, the artifacts go
+        first in batches of at most batch_size, then the result with the
+        manifests and logs.
+
+        Each request is retried after a network error or a 5xx response,
+        waiting backoff seconds and then twice as long each time. ME.org
+        stores one result per run ID, so a retry is safe.
 
         Parameters
         ----------
@@ -487,6 +546,8 @@ class Client:
             Number of retries, by default 3.
         backoff : float, optional
             First wait in seconds, by default 5.
+        batch_size : int, optional
+            Largest number of file bytes in one request, by default 100 MiB.
 
         Returns
         -------
@@ -500,22 +561,37 @@ class Client:
         if orchestrator:
             metadata["orchestrator"] = orchestrator
         files = mea.result_parts(run_dir, input_path or run_dir / "input.json", success)
+        ids = dict(model_output_id=model_output_id, experiment_id=experiment_id)
 
-        for attempt in range(retries + 1):
-            try:
-                return self.post_analysis_result(
-                    model_output_id,
-                    experiment_id,
-                    outcome="success" if success else "failure",
+        if sum(Path(path).stat().st_size for _, path in files) > batch_size:
+            artifacts = [part for part in files if part[0] not in mea.RESULT_PARTS]
+            files = [part for part in files if part[0] in mea.RESULT_PARTS]
+
+            for batch in mea.batches(artifacts, batch_size):
+                response = self._retry(
+                    self.post_analysis_artifacts,
+                    retries,
+                    backoff,
+                    **ids,
                     external_run_id=run.get("externalRunId"),
                     runner=runner,
-                    metadata=metadata,
-                    files=files,
+                    files=batch,
                 )
-            except (RequestException, requests.exceptions.RequestException) as ex:
-                if attempt == retries or getattr(ex, "status_code", 500) < 500:
-                    raise
-                time.sleep(backoff * 2**attempt)
+                # The run already has a result: the result call returns it
+                if response.get("data", {}).get("complete"):
+                    break
+
+        return self._retry(
+            self.post_analysis_result,
+            retries,
+            backoff,
+            **ids,
+            outcome="success" if success else "failure",
+            external_run_id=run.get("externalRunId"),
+            runner=runner,
+            metadata=metadata,
+            files=files,
+        )
 
     def _upload_files_parallel(
         self,
